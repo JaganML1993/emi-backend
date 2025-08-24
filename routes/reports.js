@@ -13,49 +13,40 @@ router.use(protect);
 // @access  Private
 router.get('/dashboard', async (req, res) => {
   try {
-    const { period = 'month' } = req.query;
+    const currentDate = new Date();
     
-    let startDate, endDate;
-    const now = new Date();
+    // Get current month transactions for summary and recent transactions
+    const currentMonthStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+    const currentMonthEnd = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
     
-    switch (period) {
-      case 'week':
-        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay());
-        endDate = new Date(startDate.getTime() + 6 * 24 * 60 * 60 * 1000);
-        break;
-      case 'month':
-        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-        endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-        break;
-      case 'year':
-        startDate = new Date(now.getFullYear(), 0, 1);
-        endDate = new Date(now.getFullYear(), 11, 31);
-        break;
-      default:
-        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-        endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    }
-
-    // Get transactions for the period
-    const transactions = await Transaction.find({
+    const currentMonthTransactions = await Transaction.find({
       user: req.user.id,
-      date: { $gte: startDate, $lte: endDate }
+      date: { $gte: currentMonthStart, $lte: currentMonthEnd }
+    });
+    
+    // Get current year transactions for monthly trend
+    const yearStart = new Date(currentDate.getFullYear(), 0, 1);
+    const yearEnd = new Date(currentDate.getFullYear(), 11, 31);
+    
+    const yearTransactions = await Transaction.find({
+      user: req.user.id,
+      date: { $gte: yearStart, $lte: yearEnd }
     });
 
-    // Calculate totals
-    const totalIncome = transactions
+    // Calculate totals for current month
+    const totalIncome = currentMonthTransactions
       .filter(t => t.type === 'income')
       .reduce((sum, t) => sum + t.amount, 0);
     
-    const totalExpenses = transactions
+    const totalExpenses = currentMonthTransactions
       .filter(t => t.type === 'expense')
       .reduce((sum, t) => sum + t.amount, 0);
 
     const netAmount = totalIncome - totalExpenses;
 
-    // Get EMI type breakdown
+    // Get EMI type breakdown for current month
     const emiTypeBreakdown = {};
-    transactions.forEach(transaction => {
+    currentMonthTransactions.forEach(transaction => {
       // Extract EMI type from description or tags
       let emiType = 'Other';
       let color = '#6c757d'; // Default gray color
@@ -119,23 +110,24 @@ router.get('/dashboard', async (req, res) => {
       }
     });
 
-    // Get recent transactions
+    // Get recent transactions for current month (last 5)
     const recentTransactions = await Transaction.find({
-      user: req.user.id
+      user: req.user.id,
+      date: { $gte: currentMonthStart, $lte: currentMonthEnd }
     })
     .sort({ date: -1 })
     .limit(5);
 
-    // Get monthly trend (last 6 months)
+    // Get monthly trend for current year (all 12 months)
     const monthlyTrend = [];
-    for (let i = 5; i >= 0; i--) {
-      const monthStart = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const monthEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 0);
+    for (let i = 0; i < 12; i++) {
+      const monthStart = new Date(currentDate.getFullYear(), i, 1);
+      const monthEnd = new Date(currentDate.getFullYear(), i + 1, 0);
       
-      // Get transactions for this specific month (not filtered by the period)
-      const monthTransactions = await Transaction.find({
-        user: req.user.id,
-        date: { $gte: monthStart, $lte: monthEnd }
+      // Get transactions for this specific month
+      const monthTransactions = yearTransactions.filter(t => {
+        const txDate = new Date(t.date);
+        return txDate >= monthStart && txDate <= monthEnd;
       });
       
       const monthIncome = monthTransactions
@@ -160,8 +152,7 @@ router.get('/dashboard', async (req, res) => {
         summary: {
           totalIncome,
           totalExpenses,
-          netAmount,
-          period
+          netAmount
         },
         categoryBreakdown: emiTypeBreakdown,
         recentTransactions: recentTransactions,
@@ -394,19 +385,19 @@ router.get('/emi-summary', async (req, res) => {
     // Get all EMIs for the user
     const emis = await EMI.find({ user: req.user.id });
     
-         // Get EMI payment transactions - look for transactions with EMI-related descriptions
-     const emiTransactions = await Transaction.find({
-       user: req.user.id,
-       $or: [
-         { description: { $regex: /installment/i } },
-         { description: { $regex: /EMI Payment/i } },
-         { description: { $regex: /Cheetu/i } },
-         { description: { $regex: /Cashe/i } },
-         { description: { $regex: /True Balance/i } },
-         { description: { $regex: /Sangam/i } },
-         { description: { $regex: /Suresh/i } }
-       ]
-     });
+    // Get all EMI payment transactions (no period filtering)
+    const emiTransactions = await Transaction.find({
+      user: req.user.id,
+      $or: [
+        { description: { $regex: /installment/i } },
+        { description: { $regex: /EMI Payment/i } },
+        { description: { $regex: /Cheetu/i } },
+        { description: { $regex: /Cashe/i } },
+        { description: { $regex: /True Balance/i } },
+        { description: { $regex: /Sangam/i } },
+        { description: { $regex: /Suresh/i } }
+      ]
+    });
 
          // Calculate EMI summary
      let totalEMIAmount = 0;
