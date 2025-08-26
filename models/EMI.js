@@ -19,7 +19,7 @@ const emiSchema = new mongoose.Schema({
     enum: [
       'personal_loan', 'mobile_emi', 'laptop_emi', 'savings_emi',
       'car_loan', 'home_loan', 'business_loan', 'education_loan',
-      'credit_card', 'appliance_emi', 'furniture_emi', 'bike_emi', 'cheetu', 'other'
+      'credit_card', 'appliance_emi', 'furniture_emi', 'bike_emi', 'cheetu', 'income_emi', 'other'
     ],
     default: 'other'
   },

@@ -33,6 +33,11 @@ router.get('/dashboard', async (req, res) => {
       date: { $gte: yearStart, $lte: yearEnd }
     });
 
+    // Get all-time transactions for total savings calculation
+    const allTimeTransactions = await Transaction.find({
+      user: req.user.id
+    });
+
     // Calculate totals for current month
     const totalIncome = currentMonthTransactions
       .filter(t => t.type === 'income')
@@ -49,6 +54,11 @@ router.get('/dashboard', async (req, res) => {
       .reduce((sum, emi) => sum + (emi.emiAmount || 0), 0);
 
     const netAmount = totalIncome - totalExpenses;
+
+    // Calculate total savings (sum of all-time income only)
+    const totalSavings = allTimeTransactions
+      .filter(t => t.type === 'income')
+      .reduce((sum, t) => sum + t.amount, 0);
 
     // Get EMI type breakdown for current month
     const emiTypeBreakdown = {};
@@ -161,7 +171,8 @@ router.get('/dashboard', async (req, res) => {
         summary: {
           totalIncome,
           totalExpenses,
-          netAmount
+          netAmount,
+          totalSavings
         },
         categoryBreakdown: emiTypeBreakdown,
         recentTransactions: recentTransactions,
@@ -380,10 +391,9 @@ router.get('/income', async (req, res) => {
 // @access  Private
 router.get('/emi-summary', async (req, res) => {
   try {
-    // Get all EMIs for the user, excluding savings EMIs
+    // Get all EMIs for the user, including all types
     const emis = await EMI.find({ 
-      user: req.user.id,
-      type: { $ne: 'savings_emi' }
+      user: req.user.id
     });
     
     // Get all EMI payment transactions (no period filtering)
