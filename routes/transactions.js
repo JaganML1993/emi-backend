@@ -1,6 +1,7 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const Transaction = require('../models/Transaction');
+const EMI = require('../models/EMI');
 const { protect } = require('../middleware/auth');
 
 const router = express.Router();
@@ -13,7 +14,9 @@ router.use(protect);
 // @access  Private
 router.get('/', async (req, res) => {
   try {
-    const { page = 1, limit = 10, type, startDate, endDate, sortBy = 'date', sortOrder = 'desc' } = req.query;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const { type, startDate, endDate, sortBy = 'date', sortOrder = 'desc' } = req.query;
 
     const query = { user: req.user.id };
     
@@ -29,7 +32,7 @@ router.get('/', async (req, res) => {
 
     const transactions = await Transaction.find(query)
       .sort(sort)
-      .limit(limit * 1)
+      .limit(limit)
       .skip((page - 1) * limit)
       .exec();
 
@@ -122,6 +125,65 @@ router.post('/', [
       notes
     });
 
+    // Check if this is an EMI payment transaction and update EMI data
+    if (type === 'expense' && description && (
+      description.includes('EMI Payment:') || 
+      description.includes('installment') ||
+      description.includes('Cheetu') ||
+      description.includes('Cashe') ||
+      description.includes('True Balance') ||
+      description.includes('Sangam') ||
+      description.includes('Suresh')
+    )) {
+      try {
+        // Extract EMI name from description
+        let emiName = null;
+        if (description.includes('EMI Payment:')) {
+          const match = description.match(/EMI Payment: (.+)/);
+          if (match) {
+            emiName = match[1].trim();
+          }
+        } else {
+          // For other EMI types, try to extract name from description
+          emiName = description.replace(/installment|EMI|Payment/gi, '').trim();
+        }
+
+        if (emiName) {
+          // Find the corresponding EMI
+          const emi = await EMI.findOne({
+            user: req.user.id,
+            name: { $regex: new RegExp(emiName, 'i') },
+            status: 'active'
+          });
+
+          if (emi) {
+            // Update EMI details
+            emi.paidInstallments += 1;
+            emi.remainingAmount = (emi.emiAmount * emi.totalInstallments) - (emi.paidInstallments * emi.emiAmount);
+            
+            // Update next due date - ensure proper date calculation
+            if (emi.nextDueDate) {
+              const currentDueDate = new Date(emi.nextDueDate);
+              const nextMonth = new Date(currentDueDate.getFullYear(), currentDueDate.getMonth() + 1, currentDueDate.getDate());
+              emi.nextDueDate = nextMonth;
+            }
+
+            // Check if EMI is completed
+            if (emi.paidInstallments >= emi.totalInstallments) {
+              emi.status = 'completed';
+              emi.remainingAmount = 0;
+            }
+
+            await emi.save();
+            console.log(`Updated EMI ${emi.name} after payment transaction`);
+          }
+        }
+      } catch (error) {
+        console.error('Error updating EMI after transaction:', error);
+        // Don't fail the transaction creation if EMI update fails
+      }
+    }
+
     res.status(201).json({
       success: true,
       data: transaction
@@ -173,6 +235,8 @@ router.put('/:id', [
 
 
 
+    const oldTransaction = transaction;
+    
     transaction = await Transaction.findByIdAndUpdate(
       req.params.id,
       req.body,
@@ -181,6 +245,67 @@ router.put('/:id', [
         runValidators: true
       }
     );
+
+    // If this was an EMI payment transaction and the description changed, update EMI data
+    if (req.body.description && req.body.description !== oldTransaction.description) {
+      if (req.body.type === 'expense' && req.body.description && (
+        req.body.description.includes('EMI Payment:') || 
+        req.body.description.includes('installment') ||
+        req.body.description.includes('Cheetu') ||
+        req.body.description.includes('Cashe') ||
+        req.body.description.includes('True Balance') ||
+        req.body.description.includes('Sangam') ||
+        req.body.description.includes('Suresh')
+      )) {
+        try {
+          // Extract EMI name from description
+          let emiName = null;
+          if (req.body.description.includes('EMI Payment:')) {
+            const match = req.body.description.match(/EMI Payment: (.+)/);
+            if (match) {
+              emiName = match[1].trim();
+            }
+          } else {
+            // For other EMI types, try to extract name from description
+            emiName = req.body.description.replace(/installment|EMI|Payment/gi, '').trim();
+          }
+
+          if (emiName) {
+            // Find the corresponding EMI
+            const emi = await EMI.findOne({
+              user: req.user.id,
+              name: { $regex: new RegExp(emiName, 'i') },
+              status: 'active'
+            });
+
+            if (emi) {
+              // Update EMI details
+              emi.paidInstallments += 1;
+              emi.remainingAmount = (emi.emiAmount * emi.totalInstallments) - (emi.paidInstallments * emi.emiAmount);
+              
+              // Update next due date - ensure proper date calculation
+              if (emi.nextDueDate) {
+                const currentDueDate = new Date(emi.nextDueDate);
+                const nextMonth = new Date(currentDueDate.getFullYear(), currentDueDate.getMonth() + 1, currentDueDate.getDate());
+                emi.nextDueDate = nextMonth;
+              }
+
+              // Check if EMI is completed
+              if (emi.paidInstallments >= emi.totalInstallments) {
+                emi.status = 'completed';
+                emi.remainingAmount = 0;
+              }
+
+              await emi.save();
+              console.log(`Updated EMI ${emi.name} after transaction update`);
+            }
+          }
+        } catch (error) {
+          console.error('Error updating EMI after transaction update:', error);
+          // Don't fail the transaction update if EMI update fails
+        }
+      }
+    }
 
     res.json({
       success: true,

@@ -486,9 +486,10 @@ router.post('/:id/pay', protect, [
     emi.paidInstallments += 1;
     emi.remainingAmount = (emi.emiAmount * emi.totalInstallments) - (emi.paidInstallments * emi.emiAmount);
     
-    // Update next due date
-    emi.nextDueDate = new Date(emi.nextDueDate);
-    emi.nextDueDate.setMonth(emi.nextDueDate.getMonth() + 1);
+    // Update next due date - ensure proper date calculation
+    const currentDueDate = new Date(emi.nextDueDate);
+    const nextMonth = new Date(currentDueDate.getFullYear(), currentDueDate.getMonth() + 1, currentDueDate.getDate());
+    emi.nextDueDate = nextMonth;
 
     // Check if EMI is completed
     if (emi.paidInstallments >= emi.totalInstallments) {

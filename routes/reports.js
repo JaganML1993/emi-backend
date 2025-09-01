@@ -14,14 +14,26 @@ router.use(protect);
 router.get('/dashboard', async (req, res) => {
   try {
     const currentDate = new Date();
+    const { startDate, endDate } = req.query;
     
-    // Get current month transactions for summary and recent transactions
-    const currentMonthStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
-    const currentMonthEnd = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+    // Determine date range based on query parameters or default to current month
+    let dateStart, dateEnd;
+    
+    if (startDate && endDate) {
+      // Use provided date range
+      dateStart = new Date(startDate);
+      dateEnd = new Date(endDate);
+      // Set time to end of day for endDate
+      dateEnd.setHours(23, 59, 59, 999);
+    } else {
+      // Default to current month
+      dateStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+      dateEnd = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+    }
     
     const currentMonthTransactions = await Transaction.find({
       user: req.user.id,
-      date: { $gte: currentMonthStart, $lte: currentMonthEnd }
+      date: { $gte: dateStart, $lte: dateEnd }
     });
     
     // Get current year transactions for monthly trend
@@ -43,7 +55,7 @@ router.get('/dashboard', async (req, res) => {
       .filter(t => t.type === 'income')
       .reduce((sum, t) => sum + t.amount, 0);
     
-    // Calculate total expenses as sum of all EMIs except savings EMIs and full payment EMIs
+    // Calculate total expenses as sum of all EMIs except savings EMIs, savings ami, and full payment EMIs
     const allEMIs = await EMI.find({
       user: req.user.id,
       status: 'active'
@@ -54,6 +66,11 @@ router.get('/dashboard', async (req, res) => {
       .reduce((sum, emi) => sum + (emi.emiAmount || 0), 0);
 
     const netAmount = totalIncome - totalExpenses;
+
+    // Calculate monthly savings (sum of all savings_emi type EMIs)
+    const monthlySavings = allEMIs
+      .filter(emi => emi.type === 'savings_emi' && emi.status === 'active')
+      .reduce((sum, emi) => sum + (emi.emiAmount || 0), 0);
 
     // Calculate total savings (sum of all-time income only)
     const totalSavings = allTimeTransactions
@@ -126,10 +143,10 @@ router.get('/dashboard', async (req, res) => {
       }
     });
 
-    // Get recent transactions for current month (last 5)
+    // Get recent transactions for the selected date range (last 5)
     const recentTransactions = await Transaction.find({
       user: req.user.id,
-      date: { $gte: currentMonthStart, $lte: currentMonthEnd }
+      date: { $gte: dateStart, $lte: dateEnd }
     })
     .sort({ date: -1 })
     .limit(5);
@@ -172,7 +189,8 @@ router.get('/dashboard', async (req, res) => {
           totalIncome,
           totalExpenses,
           netAmount,
-          totalSavings
+          totalSavings,
+          monthlySavings
         },
         categoryBreakdown: emiTypeBreakdown,
         recentTransactions: recentTransactions,
@@ -391,9 +409,10 @@ router.get('/income', async (req, res) => {
 // @access  Private
 router.get('/emi-summary', async (req, res) => {
   try {
-    // Get all EMIs for the user, including all types
+    // Get all EMIs for the user, excluding savings_emi type
     const emis = await EMI.find({ 
-      user: req.user.id
+      user: req.user.id,
+      type: { $ne: 'savings_emi' }
     });
     
     // Get all EMI payment transactions (no period filtering)
@@ -516,6 +535,75 @@ router.get('/emi-summary', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error generating EMI summary'
+    });
+  }
+});
+
+// @desc    Get upcoming payments (including savings_emi)
+// @route   GET /api/reports/upcoming-payments
+// @access  Private
+router.get('/upcoming-payments', async (req, res) => {
+  try {
+    // Get all EMIs for the user, including savings_emi but excluding full payment
+    const emis = await EMI.find({ 
+      user: req.user.id,
+      paymentType: { $ne: 'full_payment' }
+    });
+    
+    // Get EMI breakdown by type for upcoming payments
+    const emiBreakdown = {};
+    emis.forEach(emi => {
+      const type = emi.type;
+      if (!emiBreakdown[type]) {
+        emiBreakdown[type] = {
+          count: 0,
+          totalAmount: 0,
+          paidAmount: 0,
+          remainingAmount: 0,
+          emis: []
+        };
+      }
+      
+      // Handle regular EMIs
+      let emiTotalAmount, emiPaidAmount;
+      emiTotalAmount = emi.emiAmount * emi.totalInstallments;
+      emiPaidAmount = emi.emiAmount * emi.paidInstallments;
+      
+      emiBreakdown[type].count++;
+      emiBreakdown[type].totalAmount += emiTotalAmount;
+      emiBreakdown[type].paidAmount += emiPaidAmount;
+      emiBreakdown[type].remainingAmount += emi.remainingAmount;
+      emiBreakdown[type].emis.push({
+        id: emi._id,
+        name: emi.name,
+        emiAmount: emi.emiAmount,
+        totalInstallments: emi.totalInstallments,
+        paidInstallments: emi.paidInstallments,
+        remainingAmount: emi.remainingAmount,
+        status: emi.status,
+        nextDueDate: emi.nextDueDate,
+        endDate: emi.endDate,
+        paymentType: emi.paymentType
+      });
+    });
+
+    // Convert to array
+    const emiBreakdownArray = Object.entries(emiBreakdown).map(([type, data]) => ({
+      type,
+      ...data
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        emiBreakdown: emiBreakdownArray
+      }
+    });
+  } catch (error) {
+    console.error('Upcoming payments error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error generating upcoming payments'
     });
   }
 });
