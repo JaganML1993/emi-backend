@@ -19,14 +19,14 @@ const emiSchema = new mongoose.Schema({
     enum: [
       'personal_loan', 'mobile_emi', 'laptop_emi', 'savings_emi',
       'car_loan', 'home_loan', 'business_loan', 'education_loan',
-      'credit_card', 'appliance_emi', 'furniture_emi', 'bike_emi', 'cheetu', 'income_emi', 'other'
+      'credit_card', 'appliance_emi', 'furniture_emi', 'bike_emi', 'cheetu', 'income_emi', 'rent', 'other'
     ],
     default: 'other'
   },
   paymentType: {
     type: String,
     required: true,
-    enum: ['emi', 'full_payment'],
+    enum: ['emi', 'full_payment', 'subscription'],
     default: 'emi'
   },
 
@@ -38,7 +38,7 @@ const emiSchema = new mongoose.Schema({
   totalInstallments: {
     type: Number,
     required: function() { return this.paymentType === 'emi'; },
-    min: [1, 'Total installments must be at least 1']
+    min: [0, 'Total installments must be non-negative']
   },
   paidInstallments: {
     type: Number,
@@ -55,7 +55,7 @@ const emiSchema = new mongoose.Schema({
   },
   nextDueDate: {
     type: Date,
-    required: function() { return this.paymentType === 'emi'; }
+    required: function() { return this.paymentType === 'emi' || this.paymentType === 'subscription'; }
   },
   endDate: {
     type: Date,
@@ -91,7 +91,10 @@ emiSchema.pre('save', function(next) {
     this.remainingAmount = 0;
     this.paidInstallments = 1;
     this.totalInstallments = 1;
-  } else if (this.isModified('paidInstallments') || this.isModified('emiAmount')) {
+  } else if (this.paymentType === 'subscription') {
+    // Subscriptions are indefinite; no remaining amount
+    this.remainingAmount = 0;
+  } else if (this.paymentType === 'emi' && (this.isModified('paidInstallments') || this.isModified('emiAmount') || this.isModified('totalInstallments'))) {
     this.remainingAmount = (this.emiAmount * this.totalInstallments) - (this.paidInstallments * this.emiAmount);
   }
   next();

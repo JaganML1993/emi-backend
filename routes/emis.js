@@ -70,12 +70,13 @@ router.post('/', protect, [
   body('type').isIn([
     'personal_loan', 'mobile_emi', 'laptop_emi', 'savings_emi',
     'car_loan', 'home_loan', 'business_loan', 'education_loan',
-    'credit_card', 'appliance_emi', 'furniture_emi', 'bike_emi', 'cheetu', 'other'
+    'credit_card', 'appliance_emi', 'furniture_emi', 'bike_emi', 'cheetu', 'rent', 'other'
   ]).withMessage('Invalid EMI type'),
-  body('paymentType').isIn(['emi', 'full_payment']).withMessage('Payment type must be either EMI or Full Payment'),
+  body('paymentType').isIn(['emi', 'full_payment', 'subscription']).withMessage('Payment type must be either EMI, Subscription or Full Payment'),
 
   body('emiAmount').optional().isFloat({ min: 0 }).withMessage('EMI amount must be a positive number'),
-  body('totalInstallments').optional().isInt({ min: 1 }).withMessage('Total installments must be at least 1'),
+  // Allow 0 for subscriptions; enforce >=1 for EMI inside handler
+  body('totalInstallments').optional().isInt({ min: 0 }).withMessage('Total installments must be a non-negative integer'),
   body('startDate').isISO8601().withMessage('Please provide a valid start date'),
   body('notes').optional().trim().isLength({ max: 500 }).withMessage('Notes cannot exceed 500 characters')
 ], async (req, res) => {
@@ -112,6 +113,13 @@ router.post('/', protect, [
           message: 'Total installments is required for EMI payment type'
         });
       }
+    } else if (paymentType === 'subscription') {
+      if (!emiAmount) {
+        return res.status(400).json({
+          success: false,
+          message: 'Amount is required for subscription payment type'
+        });
+      }
     }
 
     // Calculate dates and amounts based on payment type
@@ -126,6 +134,12 @@ router.post('/', protect, [
       nextDueDate.setMonth(start.getMonth() + 1);
       
       remainingAmount = parseFloat(emiAmount) * parseInt(totalInstallments);
+    } else if (paymentType === 'subscription') {
+      const start = new Date(startDate);
+      endDate = null;
+      nextDueDate = new Date(start);
+      nextDueDate.setMonth(start.getMonth() + 1);
+      remainingAmount = 0;
     } else {
       // Full payment
       endDate = new Date(startDate);
@@ -139,7 +153,7 @@ router.post('/', protect, [
       type,
       paymentType,
       emiAmount: parseFloat(emiAmount),
-      totalInstallments: paymentType === 'emi' ? parseInt(totalInstallments) : 1,
+      totalInstallments: paymentType === 'emi' ? parseInt(totalInstallments) : (paymentType === 'subscription' ? undefined : 1),
       startDate: new Date(startDate),
       nextDueDate,
       endDate,
@@ -169,12 +183,13 @@ router.put('/:id', protect, [
   body('type').optional().isIn([
     'personal_loan', 'mobile_emi', 'laptop_emi', 'savings_emi',
     'car_loan', 'home_loan', 'business_loan', 'education_loan',
-    'credit_card', 'appliance_emi', 'furniture_emi', 'bike_emi', 'cheetu', 'other'
+    'credit_card', 'appliance_emi', 'furniture_emi', 'bike_emi', 'cheetu', 'rent', 'other'
   ]).withMessage('Invalid EMI type'),
-  body('paymentType').optional().isIn(['emi', 'full_payment']).withMessage('Payment type must be either EMI or Full Payment'),
+  body('paymentType').optional().isIn(['emi', 'full_payment', 'subscription']).withMessage('Payment type must be either EMI, Subscription or Full Payment'),
 
   body('emiAmount').optional().isFloat({ min: 0 }).withMessage('EMI amount must be a positive number'),
-  body('totalInstallments').optional().isInt({ min: 1 }).withMessage('Total installments must be at least 1'),
+  // Allow 0 for subscriptions; enforce >=1 for EMI in logic
+  body('totalInstallments').optional().isInt({ min: 0 }).withMessage('Total installments must be a non-negative integer'),
   body('startDate').optional().isISO8601().withMessage('Please provide a valid start date'),
   body('notes').optional().trim().isLength({ max: 500 }).withMessage('Notes cannot exceed 500 characters')
 ], async (req, res) => {
@@ -236,8 +251,12 @@ router.put('/:id', protect, [
       const start = updateData.startDate ? new Date(updateData.startDate) : emi.startDate;
       const totalInst = updateData.totalInstallments || emi.totalInstallments;
       
-      updateData.endDate = new Date(start);
-      updateData.endDate.setMonth(start.getMonth() + totalInst);
+      if (emi.paymentType === 'emi') {
+        updateData.endDate = new Date(start);
+        updateData.endDate.setMonth(start.getMonth() + totalInst);
+      } else if (emi.paymentType === 'subscription') {
+        updateData.endDate = null;
+      }
       
       updateData.nextDueDate = new Date(start);
       updateData.nextDueDate.setMonth(start.getMonth() + (emi.paidInstallments || 0) + 1);
@@ -249,7 +268,11 @@ router.put('/:id', protect, [
       const totalInstallments = updateData.totalInstallments || emi.totalInstallments;
       const paidInstallments = updateData.paidInstallments || emi.paidInstallments;
       
-      updateData.remainingAmount = (emiAmount * totalInstallments) - (paidInstallments * emiAmount);
+      if (emi.paymentType === 'subscription') {
+        updateData.remainingAmount = 0;
+      } else {
+        updateData.remainingAmount = (emiAmount * totalInstallments) - (paidInstallments * emiAmount);
+      }
     }
 
     emi = await EMI.findByIdAndUpdate(req.params.id, updateData, { new: true, runValidators: true });
@@ -482,9 +505,14 @@ router.post('/:id/pay', protect, [
       });
     }
 
-    // Update EMI details
-    emi.paidInstallments += 1;
-    emi.remainingAmount = (emi.emiAmount * emi.totalInstallments) - (emi.paidInstallments * emi.emiAmount);
+    // Update EMI/subscription details
+    if (emi.paymentType === 'subscription') {
+      emi.paidInstallments = (emi.paidInstallments || 0) + 1;
+      emi.remainingAmount = 0;
+    } else {
+      emi.paidInstallments += 1;
+      emi.remainingAmount = (emi.emiAmount * emi.totalInstallments) - (emi.paidInstallments * emi.emiAmount);
+    }
     
     // Update next due date - ensure proper date calculation
     const currentDueDate = new Date(emi.nextDueDate);
@@ -492,7 +520,7 @@ router.post('/:id/pay', protect, [
     emi.nextDueDate = nextMonth;
 
     // Check if EMI is completed
-    if (emi.paidInstallments >= emi.totalInstallments) {
+    if (emi.paymentType !== 'subscription' && emi.paidInstallments >= emi.totalInstallments) {
       emi.status = 'completed';
       emi.remainingAmount = 0;
     }
@@ -581,9 +609,9 @@ router.get('/summary', protect, async (req, res) => {
       active: emis.filter(emi => emi.status === 'active').length,
       completed: emis.filter(emi => emi.status === 'completed').length,
       defaulted: emis.filter(emi => emi.status === 'defaulted').length,
-      totalAmount: emis.reduce((sum, emi) => sum + (emi.emiAmount * emi.totalInstallments), 0),
-      totalRemaining: emis.reduce((sum, emi) => sum + emi.remainingAmount, 0),
-      totalPaid: emis.reduce((sum, emi) => sum + (emi.paidInstallments * emi.emiAmount), 0),
+      totalAmount: emis.reduce((sum, emi) => sum + (emi.emiAmount * (emi.totalInstallments || 0)), 0),
+      totalRemaining: emis.reduce((sum, emi) => sum + (emi.remainingAmount || 0), 0),
+      totalPaid: emis.reduce((sum, emi) => sum + ((emi.paidInstallments || 0) * emi.emiAmount), 0),
       monthlyEMI: emis.filter(emi => emi.status === 'active')
         .reduce((sum, emi) => sum + emi.emiAmount, 0)
     };

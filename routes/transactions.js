@@ -157,9 +157,16 @@ router.post('/', [
           });
 
           if (emi) {
-            // Update EMI details
-            emi.paidInstallments += 1;
-            emi.remainingAmount = (emi.emiAmount * emi.totalInstallments) - (emi.paidInstallments * emi.emiAmount);
+            // Update EMI/subscription details
+            if (emi.paymentType === 'subscription') {
+              // For subscriptions, we don't track remaining; just roll due date forward
+              // paidInstallments is optional: still increment for history/analytics
+              emi.paidInstallments = (emi.paidInstallments || 0) + 1;
+              emi.remainingAmount = 0;
+            } else {
+              emi.paidInstallments += 1;
+              emi.remainingAmount = (emi.emiAmount * emi.totalInstallments) - (emi.paidInstallments * emi.emiAmount);
+            }
             
             // Update next due date - ensure proper date calculation
             if (emi.nextDueDate) {
@@ -169,7 +176,7 @@ router.post('/', [
             }
 
             // Check if EMI is completed
-            if (emi.paidInstallments >= emi.totalInstallments) {
+            if (emi.paymentType !== 'subscription' && emi.paidInstallments >= emi.totalInstallments) {
               emi.status = 'completed';
               emi.remainingAmount = 0;
             }
@@ -279,9 +286,14 @@ router.put('/:id', [
             });
 
             if (emi) {
-              // Update EMI details
-              emi.paidInstallments += 1;
-              emi.remainingAmount = (emi.emiAmount * emi.totalInstallments) - (emi.paidInstallments * emi.emiAmount);
+              // Update EMI/subscription details
+              if (emi.paymentType === 'subscription') {
+                emi.paidInstallments = (emi.paidInstallments || 0) + 1;
+                emi.remainingAmount = 0;
+              } else {
+                emi.paidInstallments += 1;
+                emi.remainingAmount = (emi.emiAmount * emi.totalInstallments) - (emi.paidInstallments * emi.emiAmount);
+              }
               
               // Update next due date - ensure proper date calculation
               if (emi.nextDueDate) {
@@ -291,7 +303,7 @@ router.put('/:id', [
               }
 
               // Check if EMI is completed
-              if (emi.paidInstallments >= emi.totalInstallments) {
+              if (emi.paymentType !== 'subscription' && emi.paidInstallments >= emi.totalInstallments) {
                 emi.status = 'completed';
                 emi.remainingAmount = 0;
               }
