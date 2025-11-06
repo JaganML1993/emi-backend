@@ -32,6 +32,7 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/transactions', require('./routes/transactions'));
 app.use('/api/reports', require('./routes/reports'));
 app.use('/api/emis', require('./routes/emis'));
+app.use('/api/payments', require('./routes/payments'));
 
 // Root endpoint
 app.get('/', (req, res) => {
@@ -40,12 +41,13 @@ app.get('/', (req, res) => {
     message: 'Welcome to EMI Tracking API',
     version: '1.0.0',
     status: 'running',
-    endpoints: {
+      endpoints: {
       health: '/health',
       auth: '/api/auth',
       transactions: '/api/transactions',
       reports: '/api/reports',
-      emis: '/api/emis'
+      emis: '/api/emis',
+      payments: '/api/payments'
     },
     documentation: 'API endpoints for managing EMI loans, transactions, and financial reports'
   });
