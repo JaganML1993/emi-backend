@@ -133,6 +133,8 @@ router.get('/transactions/upcoming', protect, async (req, res) => {
       status: { $ne: 'completed' }
     });
 
+    console.log(`[Upcoming] Found ${payments.length} active payments for user ${req.user.id}`);
+
     // Get existing transactions for current month
     const existingTransactions = await PaymentTransaction.find({
       user: req.user.id,
@@ -214,9 +216,12 @@ router.get('/transactions/upcoming', protect, async (req, res) => {
             year: currentYear
           });
           newTransactions.push(newTxn);
+          console.log(`[Upcoming] Created transaction for payment ${payment.name} on ${paymentDate.toISOString()}`);
         }
       }
     }
+
+    console.log(`[Upcoming] Generated ${newTransactions.length} new transactions for current month`);
 
     // Get all transactions for current month (existing + newly created)
     const currentMonthTransactions = await PaymentTransaction.find({
@@ -226,12 +231,16 @@ router.get('/transactions/upcoming', protect, async (req, res) => {
     })
       .populate('payment', 'name emiType category emiDay amount startDate endDate');
 
+    console.log(`[Upcoming] Found ${currentMonthTransactions.length} total transactions for current month (${currentMonth}/${currentYear})`);
+
     // Get overdue pending transactions from previous months (but exclude payments that already have current month transactions)
     const overdueDate = new Date(currentYear, currentMonth - 1, 1);
     overdueDate.setHours(0, 0, 0, 0);
     
+    // Filter out transactions with null payment and get payment IDs
+    const validCurrentMonthTransactions = currentMonthTransactions.filter(t => t.payment && t.payment._id);
     const currentMonthPaymentIds = new Set(
-      currentMonthTransactions.map(t => t.payment._id.toString())
+      validCurrentMonthTransactions.map(t => t.payment._id.toString())
     );
 
     const overdueTransactions = await PaymentTransaction.find({
@@ -245,11 +254,15 @@ router.get('/transactions/upcoming', protect, async (req, res) => {
 
     // Filter out overdue transactions for payments that already have current month transactions
     const filteredOverdue = overdueTransactions.filter(t => 
-      !currentMonthPaymentIds.has(t.payment._id.toString())
+      t.payment && t.payment._id && !currentMonthPaymentIds.has(t.payment._id.toString())
     );
 
-    // Combine current month and overdue transactions
-    const allTransactions = [...currentMonthTransactions, ...filteredOverdue];
+    console.log(`[Upcoming] Found ${overdueTransactions.length} overdue transactions, ${filteredOverdue.length} after filtering`);
+
+    // Combine current month and overdue transactions, filter out any with null payment
+    const allTransactions = [...validCurrentMonthTransactions, ...filteredOverdue];
+
+    console.log(`[Upcoming] Total transactions to return: ${allTransactions.length}`);
 
     // Get all unique payment IDs from transactions
     const paymentIds = [...new Set(allTransactions.map(t => t.payment?._id?.toString()).filter(Boolean))]
@@ -802,9 +815,12 @@ router.get('/transactions/upcoming', protect, async (req, res) => {
             year: currentYear
           });
           newTransactions.push(newTxn);
+          console.log(`[Upcoming] Created transaction for payment ${payment.name} on ${paymentDate.toISOString()}`);
         }
       }
     }
+
+    console.log(`[Upcoming] Generated ${newTransactions.length} new transactions for current month`);
 
     // Get all transactions for current month (existing + newly created)
     const currentMonthTransactions = await PaymentTransaction.find({
@@ -814,12 +830,16 @@ router.get('/transactions/upcoming', protect, async (req, res) => {
     })
       .populate('payment', 'name emiType category emiDay amount startDate endDate');
 
+    console.log(`[Upcoming] Found ${currentMonthTransactions.length} total transactions for current month (${currentMonth}/${currentYear})`);
+
     // Get overdue pending transactions from previous months (but exclude payments that already have current month transactions)
     const overdueDate = new Date(currentYear, currentMonth - 1, 1);
     overdueDate.setHours(0, 0, 0, 0);
     
+    // Filter out transactions with null payment and get payment IDs
+    const validCurrentMonthTransactions = currentMonthTransactions.filter(t => t.payment && t.payment._id);
     const currentMonthPaymentIds = new Set(
-      currentMonthTransactions.map(t => t.payment._id.toString())
+      validCurrentMonthTransactions.map(t => t.payment._id.toString())
     );
 
     const overdueTransactions = await PaymentTransaction.find({
@@ -833,11 +853,15 @@ router.get('/transactions/upcoming', protect, async (req, res) => {
 
     // Filter out overdue transactions for payments that already have current month transactions
     const filteredOverdue = overdueTransactions.filter(t => 
-      !currentMonthPaymentIds.has(t.payment._id.toString())
+      t.payment && t.payment._id && !currentMonthPaymentIds.has(t.payment._id.toString())
     );
 
-    // Combine current month and overdue transactions
-    const allTransactions = [...currentMonthTransactions, ...filteredOverdue];
+    console.log(`[Upcoming] Found ${overdueTransactions.length} overdue transactions, ${filteredOverdue.length} after filtering`);
+
+    // Combine current month and overdue transactions, filter out any with null payment
+    const allTransactions = [...validCurrentMonthTransactions, ...filteredOverdue];
+
+    console.log(`[Upcoming] Total transactions to return: ${allTransactions.length}`);
 
     // Get all unique payment IDs from transactions
     const paymentIds = [...new Set(allTransactions.map(t => t.payment?._id?.toString()).filter(Boolean))]
