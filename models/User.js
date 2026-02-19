@@ -33,6 +33,16 @@ const userSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  role: {
+    type: String,
+    enum: ['super_admin', 'admin', 'user'],
+    default: 'user'
+  },
+  houseSavingsGoal: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
   createdAt: {
     type: Date,
     default: Date.now

@@ -1,7 +1,7 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const User = require('../models/User');
-const { protect } = require('../middleware/auth');
+const { protect, authorize } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -22,7 +22,7 @@ router.post('/register', [
       });
     }
 
-    const { name, email, password, currency, monthlyIncome } = req.body;
+    const { name, email, password, currency, monthlyIncome, role } = req.body;
 
     // Check if user already exists
     const existingUser = await User.findOne({ email });
@@ -33,13 +33,18 @@ router.post('/register', [
       });
     }
 
+    // First user becomes super_admin; otherwise use role from body or default to user
+    const userCount = await User.countDocuments();
+    const assignRole = userCount === 0 ? 'super_admin' : (role === 'super_admin' ? 'super_admin' : role === 'admin' ? 'admin' : 'user');
+
     // Create user
     const user = await User.create({
       name,
       email,
       password,
       currency: currency || 'INR',
-      monthlyIncome: monthlyIncome || 0
+      monthlyIncome: monthlyIncome || 0,
+      role: assignRole
     });
 
 
@@ -55,7 +60,8 @@ router.post('/register', [
         name: user.name,
         email: user.email,
         currency: user.currency,
-        monthlyIncome: user.monthlyIncome
+        monthlyIncome: user.monthlyIncome,
+        role: user.role
       }
     });
   } catch (error) {
@@ -116,7 +122,8 @@ router.post('/login', [
         name: user.name,
         email: user.email,
         currency: user.currency,
-        monthlyIncome: user.monthlyIncome
+        monthlyIncome: user.monthlyIncome,
+        role: user.role || 'user'
       }
     });
   } catch (error) {
@@ -142,6 +149,8 @@ router.get('/me', protect, async (req, res) => {
         email: user.email,
         currency: user.currency,
         monthlyIncome: user.monthlyIncome,
+        role: user.role || 'user',
+        houseSavingsGoal: user.houseSavingsGoal || 0,
         createdAt: user.createdAt
       }
     });
@@ -161,7 +170,9 @@ router.put('/profile', protect, [
   body('name').trim().isLength({ min: 2 }).withMessage('Name must be at least 2 characters long'),
   body('email').isEmail().withMessage('Please provide a valid email'),
   body('currency').isIn(['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'INR', 'CHF', 'CNY', 'SGD', 'HKD', 'KRW', 'BRL', 'MXN', 'RUB', 'ZAR', 'SEK', 'NOK', 'DKK', 'PLN', 'CZK', 'HUF', 'RON', 'BGN', 'HRK']).withMessage('Invalid currency'),
-  body('monthlyIncome').isFloat({ min: 0 }).withMessage('Monthly income must be a positive number')
+  body('monthlyIncome').isFloat({ min: 0 }).withMessage('Monthly income must be a positive number'),
+  body('role').optional().isIn(['super_admin', 'admin', 'user']).withMessage('Role must be super_admin, admin or user'),
+  body('houseSavingsGoal').optional().isFloat({ min: 0 }).withMessage('House savings goal must be a positive number')
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -172,7 +183,7 @@ router.put('/profile', protect, [
       });
     }
 
-    const { name, email, currency, monthlyIncome } = req.body;
+    const { name, email, currency, monthlyIncome, role, houseSavingsGoal } = req.body;
 
     // Check if email is already taken by another user
     const existingUser = await User.findOne({ email, _id: { $ne: req.user.id } });
@@ -183,15 +194,24 @@ router.put('/profile', protect, [
       });
     }
 
+    // Build update object - only admins and super_admins can change role
+    const updateData = {
+      name,
+      email,
+      currency,
+      monthlyIncome: parseFloat(monthlyIncome) || 0
+    };
+    if ((req.user.role === 'admin' || req.user.role === 'super_admin') && role) {
+      updateData.role = role;
+    }
+    if (houseSavingsGoal !== undefined) {
+      updateData.houseSavingsGoal = parseFloat(houseSavingsGoal) || 0;
+    }
+
     // Update user
     const user = await User.findByIdAndUpdate(
       req.user.id,
-      {
-        name,
-        email,
-        currency,
-        monthlyIncome: parseFloat(monthlyIncome) || 0
-      },
+      updateData,
       { new: true, runValidators: true }
     );
 
@@ -204,6 +224,8 @@ router.put('/profile', protect, [
         email: user.email,
         currency: user.currency,
         monthlyIncome: user.monthlyIncome,
+        role: user.role || 'user',
+        houseSavingsGoal: user.houseSavingsGoal || 0,
         createdAt: user.createdAt
       }
     });

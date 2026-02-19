@@ -29,10 +29,13 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Routes
 app.use('/api/auth', require('./routes/auth'));
+app.use('/api/roles', require('./routes/roles'));
+app.use('/api/users', require('./routes/users'));
 app.use('/api/transactions', require('./routes/transactions'));
 app.use('/api/reports', require('./routes/reports'));
 app.use('/api/emis', require('./routes/emis'));
 app.use('/api/payments', require('./routes/payments'));
+app.use('/api/house-savings', require('./routes/houseSavings'));
 
 // Root endpoint
 app.get('/', (req, res) => {
@@ -47,7 +50,8 @@ app.get('/', (req, res) => {
       transactions: '/api/transactions',
       reports: '/api/reports',
       emis: '/api/emis',
-      payments: '/api/payments'
+      payments: '/api/payments',
+      houseSavings: '/api/house-savings'
     },
     documentation: 'API endpoints for managing EMI loans, transactions, and financial reports'
   });
