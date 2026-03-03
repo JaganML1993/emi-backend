@@ -8,10 +8,10 @@ const router = express.Router();
 const MENU_PATHS = [
   { path: '/dashboard', name: 'Dashboard' },
   { path: '/payments', name: 'Payments' },
+  { path: '/budget', name: 'Budget' },
   { path: '/house-savings', name: 'House Savings' },
   { path: '/users', name: 'Users' },
   { path: '/user-profile', name: 'User Profile' },
-  { path: '/emi-forecast', name: 'EMI Forecast' },
   { path: '/roles-management', name: 'Roles Management' }
 ];
 
@@ -21,16 +21,19 @@ const MENU_PATHS = [
 router.get('/my-permissions', protect, async (req, res) => {
   try {
     const role = req.user.role || 'user';
-    const permissions = await RoleMenuAccess.find({ role, allowed: true }).select('path');
-    const paths = permissions.map(p => p.path);
+    const storedPermissions = await RoleMenuAccess.find({ role }).select('path allowed');
+    const storedMap = {};
+    storedPermissions.forEach(p => { storedMap[p.path] = p.allowed; });
 
-    // If no permissions in DB, use defaults: admin and super_admin see all, user sees non-admin menus
-    if (paths.length === 0) {
-      const defaultPaths = (role === 'admin' || role === 'super_admin')
-        ? MENU_PATHS.map(m => m.path)
-        : MENU_PATHS.filter(m => m.path !== '/roles-management' && m.path !== '/users').map(m => m.path);
-      return res.json({ success: true, paths: defaultPaths });
-    }
+    // For each known menu path, use stored value if it exists, otherwise apply role default
+    const paths = MENU_PATHS
+      .filter(m => {
+        if (storedMap[m.path] !== undefined) return storedMap[m.path];
+        // Default: admin/super_admin see everything, user sees non-admin menus
+        if (role === 'admin' || role === 'super_admin') return true;
+        return m.path !== '/roles-management' && m.path !== '/users' && m.path !== '/user-profile';
+      })
+      .map(m => m.path);
 
     res.json({ success: true, paths });
   } catch (error) {
@@ -51,7 +54,7 @@ router.get('/permissions', protect, authorize('admin', 'super_admin'), async (re
     MENU_PATHS.forEach(m => {
       byRole.super_admin[m.path] = true;
       byRole.admin[m.path] = true;
-      byRole.user[m.path] = m.path !== '/roles-management' && m.path !== '/users';
+      byRole.user[m.path] = m.path !== '/roles-management' && m.path !== '/users' && m.path !== '/user-profile';
     });
 
     permissions.forEach(p => {
