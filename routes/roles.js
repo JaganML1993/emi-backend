@@ -10,6 +10,7 @@ const MENU_PATHS = [
   { path: '/payments', name: 'Payments' },
   { path: '/budget', name: 'Budget' },
   { path: '/house-savings', name: 'House Savings' },
+  { path: '/gold-savings', name: 'Gold Savings' },
   { path: '/users', name: 'Users' },
   { path: '/user-profile', name: 'User Profile' },
   { path: '/roles-management', name: 'Roles Management' }
@@ -31,7 +32,8 @@ router.get('/my-permissions', protect, async (req, res) => {
         if (storedMap[m.path] !== undefined) return storedMap[m.path];
         // Default: admin/super_admin see everything, user sees non-admin menus
         if (role === 'admin' || role === 'super_admin') return true;
-        return m.path !== '/roles-management' && m.path !== '/users' && m.path !== '/user-profile';
+        const adminOnly = ['/roles-management', '/users', '/user-profile'];
+        return !adminOnly.includes(m.path);
       })
       .map(m => m.path);
 
@@ -54,7 +56,8 @@ router.get('/permissions', protect, authorize('admin', 'super_admin'), async (re
     MENU_PATHS.forEach(m => {
       byRole.super_admin[m.path] = true;
       byRole.admin[m.path] = true;
-      byRole.user[m.path] = m.path !== '/roles-management' && m.path !== '/users' && m.path !== '/user-profile';
+      const adminOnly = ['/roles-management', '/users', '/user-profile'];
+      byRole.user[m.path] = !adminOnly.includes(m.path);
     });
 
     permissions.forEach(p => {

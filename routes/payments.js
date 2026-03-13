@@ -51,6 +51,52 @@ const generatePaymentTransactions = async (payment) => {
   return transactions;
 };
 
+// @desc    Get total amount paid for savings category (all-time)
+// @route   GET /api/payments/savings-total
+// @access  Private
+router.get('/savings-total', protect, async (req, res) => {
+  try {
+    // Find all savings payments for this user
+    const savingsPayments = await Payment.find({ user: req.user.id, category: 'savings' });
+    const savingsPaymentIds = savingsPayments.map(p => p._id);
+
+    // Sum all paid transactions belonging to those payments
+    const result = await PaymentTransaction.aggregate([
+      {
+        $match: {
+          user: new mongoose.Types.ObjectId(req.user.id),
+          payment: { $in: savingsPaymentIds },
+          status: 'paid',
+        },
+      },
+      {
+        $lookup: {
+          from: 'payments',
+          localField: 'payment',
+          foreignField: '_id',
+          as: 'paymentData',
+        },
+      },
+      { $unwind: '$paymentData' },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: '$paymentData.amount' },
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    const total = result[0]?.total || 0;
+    const count = result[0]?.count || 0;
+
+    res.json({ success: true, data: { total, count } });
+  } catch (error) {
+    console.error('savings-total error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
 // @desc    Get all payments for a user
 // @route   GET /api/payments
 // @access  Private
