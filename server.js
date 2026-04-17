@@ -38,6 +38,7 @@ app.use('/api/payments', require('./routes/payments'));
 app.use('/api/house-savings', require('./routes/houseSavings'));
 app.use('/api/budget', require('./routes/budget'));
 app.use('/api/gold-savings', require('./routes/goldSavings'));
+app.use('/api/expenses', require('./routes/expenses'));
 
 // Root endpoint
 app.get('/', (req, res) => {

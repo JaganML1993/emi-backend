@@ -11,6 +11,7 @@ const MENU_PATHS = [
   { path: '/budget', name: 'Budget' },
   { path: '/house-savings', name: 'House Savings' },
   { path: '/gold-savings', name: 'Gold Savings' },
+  { path: '/expenses', name: 'Expenses' },
   { path: '/users', name: 'Users' },
   { path: '/user-profile', name: 'User Profile' },
   { path: '/roles-management', name: 'Roles Management' }
