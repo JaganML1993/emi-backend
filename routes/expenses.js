@@ -57,11 +57,12 @@ router.get('/summary', async (req, res) => {
     const months = Math.min(Math.max(parseInt(req.query.months) || 3, 1), 24);
 
     const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const thisMonthEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
     const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const lastMonthEnd   = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
     const rangeStart     = new Date(now.getFullYear(), now.getMonth() - (months - 1), 1);
 
-    const [thisMonth, lastMonth, categories, monthly] = await Promise.all([
+    const [thisMonth, lastMonth, categories, monthly, dailyByDay] = await Promise.all([
       // This month type breakdown
       Expense.aggregate([
         { $match: { user: req.user._id, date: { $gte: thisMonthStart } } },
@@ -95,6 +96,22 @@ router.get('/summary', async (req, res) => {
         },
         { $sort: { '_id.year': 1, '_id.month': 1 } },
       ]),
+      // This month: expense totals per calendar day (current month only)
+      Expense.aggregate([
+        {
+          $match: {
+            user: req.user._id,
+            date: { $gte: thisMonthStart, $lte: thisMonthEnd },
+            type: 'expense',
+          },
+        },
+        {
+          $group: {
+            _id: { $dayOfMonth: '$date' },
+            total: { $sum: '$amount' },
+          },
+        },
+      ]),
     ]);
 
     // Build ordered month labels and data arrays
@@ -121,6 +138,17 @@ router.get('/summary', async (req, res) => {
 
     const toMap = (arr) => arr.reduce((m, x) => ({ ...m, [x._id]: { total: x.total, count: x.count } }), {});
 
+    const dailyMap = dailyByDay.reduce((m, r) => ({ ...m, [r._id]: r.total }), {});
+    const daysInMonth = thisMonthEnd.getDate();
+    const dailyExpenseData = [];
+    for (let d = 1; d <= daysInMonth; d += 1) {
+      dailyExpenseData.push({
+        day: d,
+        label: String(d),
+        expense: dailyMap[d] || 0,
+      });
+    }
+
     res.json({
       success: true,
       data: {
@@ -128,6 +156,7 @@ router.get('/summary', async (req, res) => {
         lastMonth:    toMap(lastMonth),
         topCategories: categories,
         monthlyData,
+        dailyExpenseData,
       },
     });
   } catch (err) {

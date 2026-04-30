@@ -35,10 +35,10 @@ app.use('/api/transactions', require('./routes/transactions'));
 app.use('/api/reports', require('./routes/reports'));
 app.use('/api/emis', require('./routes/emis'));
 app.use('/api/payments', require('./routes/payments'));
-app.use('/api/house-savings', require('./routes/houseSavings'));
 app.use('/api/budget', require('./routes/budget'));
 app.use('/api/gold-savings', require('./routes/goldSavings'));
 app.use('/api/expenses', require('./routes/expenses'));
+app.use('/api/land-savings', require('./routes/landSavings'));
 
 // Root endpoint
 app.get('/', (req, res) => {
@@ -53,8 +53,7 @@ app.get('/', (req, res) => {
       transactions: '/api/transactions',
       reports: '/api/reports',
       emis: '/api/emis',
-      payments: '/api/payments',
-      houseSavings: '/api/house-savings'
+      payments: '/api/payments'
     },
     documentation: 'API endpoints for managing EMI loans, transactions, and financial reports'
   });

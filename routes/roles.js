@@ -7,14 +7,14 @@ const router = express.Router();
 // Default menu paths for the application
 const MENU_PATHS = [
   { path: '/dashboard', name: 'Dashboard' },
-  { path: '/payments', name: 'Payments' },
-  { path: '/budget', name: 'Budget' },
-  { path: '/house-savings', name: 'House Savings' },
-  { path: '/gold-savings', name: 'Gold Savings' },
   { path: '/expenses', name: 'Expenses' },
+  { path: '/land-savings', name: 'Land Savings' },
+  { path: '/payments', name: 'EMI' },
+  { path: '/budget', name: 'Budget' },
+  { path: '/gold-savings', name: 'Gold Savings' },
   { path: '/users', name: 'Users' },
+  { path: '/roles-management', name: 'Roles Management' },
   { path: '/user-profile', name: 'User Profile' },
-  { path: '/roles-management', name: 'Roles Management' }
 ];
 
 // @desc    Get allowed menu paths for current user

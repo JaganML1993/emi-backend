@@ -150,7 +150,6 @@ router.get('/me', protect, async (req, res) => {
         currency: user.currency,
         monthlyIncome: user.monthlyIncome,
         role: user.role || 'user',
-        houseSavingsGoal: user.houseSavingsGoal || 0,
         createdAt: user.createdAt
       }
     });
@@ -171,8 +170,7 @@ router.put('/profile', protect, [
   body('email').isEmail().withMessage('Please provide a valid email'),
   body('currency').isIn(['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'INR', 'CHF', 'CNY', 'SGD', 'HKD', 'KRW', 'BRL', 'MXN', 'RUB', 'ZAR', 'SEK', 'NOK', 'DKK', 'PLN', 'CZK', 'HUF', 'RON', 'BGN', 'HRK']).withMessage('Invalid currency'),
   body('monthlyIncome').isFloat({ min: 0 }).withMessage('Monthly income must be a positive number'),
-  body('role').optional().isIn(['super_admin', 'admin', 'user']).withMessage('Role must be super_admin, admin or user'),
-  body('houseSavingsGoal').optional().isFloat({ min: 0 }).withMessage('House savings goal must be a positive number')
+  body('role').optional().isIn(['super_admin', 'admin', 'user']).withMessage('Role must be super_admin, admin or user')
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -183,7 +181,7 @@ router.put('/profile', protect, [
       });
     }
 
-    const { name, email, currency, monthlyIncome, role, houseSavingsGoal } = req.body;
+    const { name, email, currency, monthlyIncome, role } = req.body;
 
     // Check if email is already taken by another user
     const existingUser = await User.findOne({ email, _id: { $ne: req.user.id } });
@@ -204,9 +202,6 @@ router.put('/profile', protect, [
     if ((req.user.role === 'admin' || req.user.role === 'super_admin') && role) {
       updateData.role = role;
     }
-    if (houseSavingsGoal !== undefined) {
-      updateData.houseSavingsGoal = parseFloat(houseSavingsGoal) || 0;
-    }
 
     // Update user
     const user = await User.findByIdAndUpdate(
@@ -225,7 +220,6 @@ router.put('/profile', protect, [
         currency: user.currency,
         monthlyIncome: user.monthlyIncome,
         role: user.role || 'user',
-        houseSavingsGoal: user.houseSavingsGoal || 0,
         createdAt: user.createdAt
       }
     });
