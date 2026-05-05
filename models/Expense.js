@@ -21,7 +21,16 @@ const expenseSchema = new mongoose.Schema({
     type: String,
     required: [true, 'Please provide a category'],
     trim: true,
-    maxlength: [50, 'Category cannot be more than 50 characters']
+    maxlength: [64, 'Category cannot be more than 64 characters'],
+    enum: [
+      'EMI',
+      'Others',
+      'Bills and Utilities',
+      'Rent',
+      'Groceries',
+      'Health and Medical',
+      'Food Dining',
+    ],
   },
   paymentMode: {
     type: String,
@@ -46,6 +55,7 @@ const expenseSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 expenseSchema.index({ user: 1, date: -1 });
+expenseSchema.index({ user: 1, createdAt: -1 });
 expenseSchema.index({ user: 1, type: 1 });
 expenseSchema.index({ user: 1, category: 1 });
 

@@ -8,7 +8,8 @@
     "dev": "nodemon server.js",
     "test": "echo \"Error: no test specified\" && exit 1",
     "test-api": "node test-api.js",
-    "add-emi-categories": "node scripts/addDefaultEMICategories.js"
+    "add-emi-categories": "node scripts/addDefaultEMICategories.js",
+    "migrate-expense-categories": "node scripts/migrateExpenseCategories.js"
   },
   "dependencies": {
     "express": "^4.18.2",
